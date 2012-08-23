@@ -5,7 +5,7 @@ The riak_mapreduce_utils module contains a collection of six mapreduce utility f
 
 The first one is a map phase delete function called **map_delete**, which allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
 
-The next 2 functions, **map_indexlink** and **map_indexinclude** allow master-detail relationships to be defined and managed through secondary indexes (2i) instead of the usual links. These functions rely on a reference to the master record being set as a secondary index on each of the detail records. Unlike when using links to manage master-detail relationships, this method allows detail records to be added or deleted without having to update the master record. 
+The next 2 functions, **map_indexlink** and **map_indexinclude** allow master-detail relationships to be defined and managed through secondary indexes (2i) instead of links. These functions rely on a reference to the master record being set as a secondary index on each of the detail records. Unlike when using links to manage master-detail relationships, this method allows detail records to be added or deleted without having to update the master record. 
 
 **map_indexlink** allows retrieval of master record from the detail record based on the 2i in a manner similar to how links work.
 
@@ -13,7 +13,7 @@ The next 2 functions, **map_indexlink** and **map_indexinclude** allow master-de
 
 The fourth one is a map phase function called **map_metafilter**. This allows records to be filtered out from the result set based on Bucket and meta data (2i and user metadata).
 
-**map_id** returns Bucket and Key pairs, while the **map_key** function just returns Keys.
+**map_id** returns readable bucket and key pairs, while the **map_key** function just returns readable keys.
 
 Installation
 ============
@@ -37,19 +37,19 @@ Function Reference
 
 This section contains more detailed information about the configuration, usage and behaviour of the functions provided in this module.
 
-The examples provided assume we have test data in the two buckets named **master** and **detail**. The master records have a binary secondary index indicating type (**type_bin**) while the records in the detail bucket have a reference to the appropriate master in a binary secondary index called **fk_master_bin**. 
+The examples provided assume we have test data in the two buckets named **master** and **detail**. The records in the detail bucket have a reference to the appropriate master in a binary secondary index called **fk_master_bin**. 
 
-The records in the **details2** bucket also have a secondary integer index defined named **idx_int** as well as a metadata field called **type**. These have been added for use with the last of the four functions, **map_metafilter**.
+The records in the **details** bucket also have a secondary integer index defined named **idx_int** as well as a metadata field called **type**. These have been added for use with the last of the four functions, **map_metafilter**.
+
+As these mapping functions do not operate on the record data in any way, this has been set to a generic string.
 
 The records can be created through *curl* as follows:
 
     $> curl -X POST \
-        -H 'x-riak-index-type_bin: A' \
         -d 'm1_data' \
         http://localhost:8098/buckets/master/keys/m1
 
     $> curl -X POST \
-        -H 'x-riak-index-type_bin: B' \
         -d 'm2_data' \ 
         http://localhost:8098/buckets/master/keys/m2
 
@@ -101,7 +101,7 @@ This example lists all IDs currently present in the *detail* bucket.
 map_key()
 ----------------
 
-The **map_id** function takes one optional argument, the name of the bucket to print keys from. If specified, records belonging to a bucket different from the one specified will be filtered out. If the parameter is not specified, the key of all records that are passed to the function will be output.
+The **map_key** function takes one optional argument, the name of the bucket to print keys from. If specified, records belonging to a bucket different from the one specified will be filtered out. If the parameter is not specified, the keys of all records that are passed to the function will be output.
 
 ###Example
 
@@ -124,9 +124,9 @@ The function returns the number of records deleted and can be used together with
 
 ###Examples
 
-**Delete ALL records in a bucket**
+**Delete all records in a bucket**
 
-This example deletes all records belonging to the detail bucket and returns a count of the number of records deleted.
+This example deletes all records belonging to the *detail* bucket and returns a count of the number of records deleted.
 
     $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
 	     "inputs":"detail",
@@ -153,25 +153,25 @@ The following example contains a filter for only deleting records belonging to t
 map_indexlink()
 ---------------
 
-The **map_indexlink** function allows retrieval of related records through secondary index *links* in a way similar to how link walking works. It does assume that the *link* is specified through a secondary index, which contains a reference (key) to another record. This allows the retrieval of e.g. a *master* record based on a *detail* record.
+The **map_indexlink** function allows retrieval of related records through secondary index links in a way similar to how link walking works. It does assume that the link is specified through a secondary index, which contains a reference (key) to another record. This allows the retrieval of e.g. a master record based on a detail record.
 
 The function takes a JSON formatted argument that specifies how the linking is done and what index that is to be used. 
 
-The function can be configured to return either both the *source* and *target* records or just the resulting *target* record.
+The function can be configured to return either both the source and target records or just the resulting target record.
 
 ###Configuration
 
 The configuration string must be a correctly formatted JSON document and may contain the following 4 fields:
 
-**source** - Name of the bucket containing records to be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through and not processed by the function. 
+**source** - Name of the bucket containing records to be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **keep** parameter described below. 
 
 This is an optional field, and if no **source** is specified, all records passed in will be processed.
 
-**target** - This field is mandatory and must contain the name of the bucket the operation should link to. 
+**target** - This field is mandatory and must contain the name of the bucket the operation should link to. The value of this parameter will be used together with the index value to create the target object ID.
 
 **indexname** - This field is mandatory and must contain the name of the index to be used for the linking.
 
-**keep** - This parameter is optional and detaults to *true*. It specifies whether the input should be kept as part of the result set or not. If set to false, only records retrieved through the link are returned. 
+**keep** - This parameter is optional and defaults to *true*. It specifies whether the input should be kept as part of the result set or not. If set to false, only records retrieved through the link are returned. 
 
 Below is an example of a valid configuration based on the testdata specified above. 
 
@@ -184,7 +184,7 @@ Below is an example of a valid configuration based on the testdata specified abo
 
 If a single detail record is processed by a function with this configuration, it will return just the master record as it is configured to not keep the input record in the result set.
 
-Note that the link is evaluated once for every record, so if multiple detail records belonging to the same master record are passed on, there may be multiple occurances of the master record as a result.
+Note that the link is evaluated once for every record passed in, so if multiple detail records belonging to the same master record are passed on, there may be multiple occurances of the master record as a result.
 
 ###Examples
 
@@ -205,7 +205,7 @@ The following example takes a single detail record as input and returns this rec
 
 **Retrieving master record related to single detail record while dropping the input**
 
-This example returns the master record only (*master:m1*), as the input to the map phase function is configured to be dropped. 
+This example returns the master record only (*master:m1*), as the input to the map phase function (*detail:d2*) is configured to be dropped. 
 
     $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
         "inputs":[["detail","d2"]],
@@ -225,7 +225,7 @@ As the function relies on secondary indexes, it requires a storage backend that 
 map_indexinclude()
 ------------------
 
-In the example data provided, The link between *detail* records and their respective *master* is created through a secondary index on the *detail* records (*fk_master_bin*). **map_indexinclude** makes it possible to retrieve such *detail* records based on the *master* record.
+In the example data provided, The link between detail records and their respective master is created through a secondary index on the detail records (*fk_master_bin*). **map_indexinclude** makes it possible to retrieve such detail records based on the master record.
 
 This function complements **map_indexlink** in that it allows processing of the relationship the other way.
 
@@ -235,7 +235,7 @@ The function takes a JSON formatted argument that specifies how the linking is d
 
 The configuration string must be a correctly formatted JSON document and may contain the following 4 fields: 
 
-**source** - Name of the bucket containing records to be processed. This is a mandatory field and only records belonging to this bucket will be processed.
+**source** - Name of the bucket containing records to be processed. This is a mandatory field and only records belonging to this bucket will be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **keep** parameter described below
 
 **target** - This field is mandatory and must contain the name of the bucket the operation should link to. 
 
@@ -247,7 +247,7 @@ The configuration string must be a correctly formatted JSON document and may con
 
 **Retrieve all detail records related to a specific master record**
 
-This example takes a single *master* record and retrieves all related *detail* records. AS *keep* is set to *false*, the original *master* record that the fetch was based on is excluded from the result set, and only the appropriate *detail* records are returned.
+This example takes a single master record and retrieves all related detail records. AS **keep** is set to *false*, the original master record that the fetch was based on is excluded from the result set, and only the appropriate detail records are returned.
 
     $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
         "inputs":[["master","m1"]],
@@ -281,7 +281,7 @@ This is an optional field, and if no **source** is specified, all records passed
 
 **criteria** - This field contains a list of criteria. These will be evaluated against the record, and if ALL of them evaluate to true, the record will be filtered out.
 
-A criteria consists of an *operation*, a *field* to operate on and one or two *parameters*.
+A criteria consists of an *operation*, a *field* to operate on and a *parameter*.
 
 Fields can be either a secondary index (specified as *"index:\<index name\>"*) or user metadata field (specified as *"meta:\<meta data name\>"*). 
 
