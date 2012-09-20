@@ -1,7 +1,7 @@
 Overview
 ========
 
-The riak_mapreduce_utils module contains a collection of six mapreduce utility functions implemented in erlang.
+The riak_mapreduce_utils module contains a collection of seven mapreduce utility functions implemented in erlang.
 
 The first one is a map phase delete function called **map_delete**, which allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
 
@@ -14,6 +14,8 @@ The next 2 functions, **map_indexlink** and **map_indexinclude** allow master-de
 The fourth one is a map phase function called **map_metafilter**. This allows records to be filtered out from the result set based on Bucket and meta data (2i and user metadata).
 
 **map_id** returns readable bucket and key pairs, while the **map_key** function just returns readable keys.
+
+The last one, **map_datasize** returns the size of the stored object.
 
 Installation
 ============
@@ -95,8 +97,8 @@ This example lists all IDs currently present in the *detail* bucket.
 	     "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
 	                     "function":"map_id"}}]}'
 	                     
-	[["detail","d2"],["detail","d3"],["detail","d4"],["detail","d1"]]
-	$>
+    [["detail","d2"],["detail","d3"],["detail","d4"],["detail","d1"]]
+    $>
 
 map_key()
 ----------------
@@ -112,8 +114,8 @@ This example specifies that only keys belonging to the *detail* bucket are to be
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
         "function":"map_key","arg":"detail"}}]}'
 	                     
-	["d3","d1"]
-	$>
+    ["d3","d1"]
+    $>
 
 map_delete()
 ------------
@@ -134,8 +136,8 @@ This example deletes all records belonging to the *detail* bucket and returns a 
 	                     "function":"map_delete","keep":false}},
 	              {"reduce":{"language":"erlang","module":"riak_kv_mapreduce",
 	                        "function":"reduce_sum"}}]}'
-	[4]
-	$>
+    [4]
+    $>
 
 **Delete only record passed in that belong to the *detail* bucket**
 
@@ -147,8 +149,8 @@ The following example contains a filter for only deleting records belonging to t
 	                     "function":"map_delete","keep":false,"arg":"detail"}},
 	              {"reduce":{"language":"erlang","module":"riak_kv_mapreduce",
 	                        "function":"reduce_sum"}}]}'
-	[1]
-	$>
+    [1]
+    $>
 
 map_indexlink()
 ---------------
@@ -200,8 +202,8 @@ The following example takes a single detail record as input and returns this rec
 	                     \"indexname\":\"fk_master_bin\"}"}},
 	              {"map":{"language":"erlang","module":"riak_mapreduce_utils",
 	                     "function":"map_id"}}]}'
-	[["detail","d2"],["master","m1"]]
-	$>
+    [["detail","d2"],["master","m1"]]
+    $>
 
 **Retrieving master record related to single detail record while dropping the input**
 
@@ -367,6 +369,20 @@ The example below shows how to filter out all the records that have an integer i
     [["detail","d4"],["detail","d3"]]
     $>
 
+map_datasize()
+----------------
 
+The **map_datasize** function returns the size of the value stored in bytes. If there are siblings present, it returns the combined size of these values.
+
+###Example
+
+This example specifies that only keys belonging to the *detail* bucket are to be output, and the record belonging to the *master* bucket is therefore suppressed.
+
+    $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
+        "inputs":"master",
+	"query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils","function":"map_datasize"}},
+	{"reduce":{"language":"erlang","module":"riak_kv_mapreduce","function":"reduce_sum"}}]}'
+    [14]
+    $>
 
 

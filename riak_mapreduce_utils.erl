@@ -27,7 +27,8 @@
          map_indexlink/3,
          map_metafilter/3,
          map_id/3,
-         map_key/3
+         map_key/3,
+         map_datasize/3
         ]).
 
 %% From riak_pb_kv_codec.hrl
@@ -207,6 +208,18 @@ map_key(RiakObject, _, Arg) when is_binary(Arg) ->
     end;
 map_key(_, _, _) ->
     [].   
+
+%% @spec map_datasize(riak_object:riak_object(), term(), term()) ->
+%%                   [integer()]
+%% @doc map phase function returning size of the data stored in bytes.
+%% It does return total size if siblings are found.
+map_datasize({error, notfound}, _, _) ->
+    [];
+map_datasize(RiakObject, _, _) ->
+    DataSize = lists:foldl(fun(V, A) ->
+                               (byte_size(V) + A)
+                           end, 0, riak_object:get_values(RiakObject)),
+    [DataSize].
 
 %% hidden
 get_index_items(Bucket, Props, IndexName, Value) ->
