@@ -376,7 +376,7 @@ The **map_datasize** function returns the size of the value stored in bytes. If 
 
 ###Example
 
-This example specifies that only keys belonging to the *detail* bucket are to be output, and the record belonging to the *master* bucket is therefore suppressed.
+This example sums up the size of data for all records in the *master* bucket.
 
     $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
         "inputs":"master",
