@@ -1,21 +1,25 @@
 Overview
 ========
 
-The riak_mapreduce_utils module contains a collection of seven mapreduce utility functions implemented in erlang.
+The riak_mapreduce_utils module contains a collection of eight mapreduce utility functions implemented in Erlang.
 
-The first one is a map phase delete function called **map_delete**, which allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
+**map_delete** allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
 
-The next 2 functions, **map_indexlink** and **map_indexinclude** allow master-detail relationships to be defined and managed through secondary indexes (2i) instead of links. These functions rely on a reference to the master record being set as a secondary index on each of the detail records. Unlike when using links to manage master-detail relationships, this method allows detail records to be added or deleted without having to update the master record. 
+**map_indexlink** and **map_indexinclude** allow master-detail relationships to be defined and managed through secondary indexes (2i) instead of links. These functions rely on a reference to the master record being set as a secondary index on each of the detail records. Unlike when using links to manage master-detail relationships, this method allows detail records to be added or deleted without having to update the master record. 
 
 **map_indexlink** allows retrieval of master record from the detail record based on the 2i in a manner similar to how links work.
 
 **map_indexinclude** allows retrieval of detail records linked to a master record through an index query. 
 
-The fourth one is a map phase function called **map_metafilter**. This allows records to be filtered out from the result set based on Bucket and meta data (2i and user metadata).
+**map_link** enables flexible addition of linked records to the result set.
 
-**map_id** returns readable bucket and key pairs, while the **map_key** function just returns readable keys.
+**map_metafilter** allows records to be filtered out from the result set based on Bucket and meta data (2i and user metadata).
 
-The last one, **map_datasize** returns the size of the stored object.
+**map_id** returns readable bucket and key pairs. 
+
+**map_key** returns readable keys.
+
+**map_datasize** returns the size of the stored object.
 
 Installation
 ============
@@ -43,12 +47,16 @@ The examples provided assume we have test data in the two buckets named **master
 
 The records in the **details** bucket also have a secondary integer index defined named **idx_int** as well as a metadata field called **type**. These have been added for use with the last of the four functions, **map_metafilter**.
 
+The m1 master record also contains 2 links to detail records. These are there to allow examples using the **map_link** function.
+
 As these mapping functions do not operate on the record data in any way, this has been set to a generic string.
 
 The records can be created through *curl* as follows:
 
     $> curl -X POST \
         -d 'm1_data' \
+        -H 'Link: </buckets/detail/keys/d1>; riaktag="first"' \
+        -H 'Link: </buckets/detail/keys/d3>; riaktag="last"' \
         http://localhost:8098/buckets/master/keys/m1
 
     $> curl -X POST \
@@ -165,7 +173,7 @@ The function can be configured to return either both the source and target recor
 
 The configuration string must be a correctly formatted JSON document and may contain the following 4 fields:
 
-**source** - Name of the bucket containing records to be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **keep** parameter described below. 
+**bucket** - Name of the bucket containing records to be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **keep** parameter described below. 
 
 This is an optional field, and if no **source** is specified, all records passed in will be processed.
 
@@ -173,15 +181,15 @@ This is an optional field, and if no **source** is specified, all records passed
 
 **indexname** - This field is mandatory and must contain the name of the index to be used for the linking.
 
-**keep** - This parameter is optional and defaults to *true*. It specifies whether the input should be kept as part of the result set or not. If set to false, only records retrieved through the link are returned. 
+**retain** - This parameter is optional and defaults to *true*. It specifies whether the input should be retained as part of the result set or not. If set to false, only records retrieved through the link are returned. 
 
 Below is an example of a valid configuration based on the testdata specified above. 
 
     "{
-        "source":"detail",
+        "bucket":"detail",
         "target":"master",
         "indexname":"fk_master_bin",
-        "keep":"false"
+        "retain":"false"
     }"
 
 If a single detail record is processed by a function with this configuration, it will return just the master record as it is configured to not keep the input record in the result set.
@@ -198,7 +206,7 @@ The following example takes a single detail record as input and returns this rec
 	     "inputs":[["detail","d2"]],
 	     "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
 	                     "function":"map_indexlink","keep":false,
-	                     "arg":"{\"source\":\"detail\",\"target\":\"master\",
+	                     "arg":"{\"bucket\":\"detail\",\"target\":\"master\",
 	                     \"indexname\":\"fk_master_bin\"}"}},
 	              {"map":{"language":"erlang","module":"riak_mapreduce_utils",
 	                     "function":"map_id"}}]}'
@@ -213,8 +221,8 @@ This example returns the master record only (*master:m1*), as the input to the m
         "inputs":[["detail","d2"]],
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
                         "function":"map_indexlink","keep":false,
-                        "arg":"{\"source\":\"detail\",\"target\":\"master\",
-                        \"indexname\":\"fk_master_bin\",\"keep\":\"false\"}"}},
+                        "arg":"{\"bucket\":\"detail\",\"target\":\"master\",
+                        \"indexname\":\"fk_master_bin\",\"retain\":\"false\"}"}},
                  {"map":{"language":"erlang","module":"riak_mapreduce_utils",
                         "function":"map_id"}}]}'
     [["master","m1"]]
@@ -227,7 +235,7 @@ As the function relies on secondary indexes, it requires a storage backend that 
 map_indexinclude()
 ------------------
 
-In the example data provided, The link between detail records and their respective master is created through a secondary index on the detail records (*fk_master_bin*). **map_indexinclude** makes it possible to retrieve such detail records based on the master record.
+In the example data provided, the link between detail records and their respective master is created through a secondary index on the detail records (*fk_master_bin*). **map_indexinclude** makes it possible to retrieve such detail records based on the master record.
 
 This function complements **map_indexlink** in that it allows processing of the relationship the other way.
 
@@ -237,26 +245,26 @@ The function takes a JSON formatted argument that specifies how the linking is d
 
 The configuration string must be a correctly formatted JSON document and may contain the following 4 fields: 
 
-**source** - Name of the bucket containing records to be processed. This is a mandatory field and only records belonging to this bucket will be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **keep** parameter described below
+**bucket** - Name of the bucket containing records to be processed. This is a mandatory field and only records belonging to this bucket will be processed. If a record is encountered that does not belong to the specified bucket, it will be passed straight through based on the **retain** parameter described below
 
 **target** - This field is mandatory and must contain the name of the bucket the operation should link to. 
 
 **indexname** - Thi field is mandatory and must contain the name of the index on the target bucket that is to be used.
 
-**keep** - This parameter is optional and detaults to *true*. It specifies whether the input should be kept as part of the result set or not. If set to false, only records retrieved through the link are returned. 
+**retain** - This parameter is optional and detaults to *true*. It specifies whether the input should be retained as part of the result set or not. If set to false, only records retrieved through the link are returned. 
 
 ###Example
 
 **Retrieve all detail records related to a specific master record**
 
-This example takes a single master record and retrieves all related detail records. AS **keep** is set to *false*, the original master record that the fetch was based on is excluded from the result set, and only the appropriate detail records are returned.
+This example takes a single master record and retrieves all related detail records. As **retain** is set to *false*, the original master record that the fetch was based on is excluded from the result set, and only the appropriate detail records are returned.
 
     $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
         "inputs":[["master","m1"]],
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
                         "function":"map_indexinclude","keep":false,
-                        "arg":"{\"source\":\"master\",\"target\":\"detail\",
-                        \"indexname\":\"fk_master_bin\",\"keep\":\"false\"}"}},
+                        "arg":"{\"bucket\":\"master\",\"target\":\"detail\",
+                        \"indexname\":\"fk_master_bin\",\"retain\":\"false\"}"}},
                  {"map":{"language":"erlang","module":"riak_mapreduce_utils",
                         "function":"map_id"}}]}'
     [["detail","d3"],["detail","d2"],["detail","d1"]]
@@ -265,6 +273,54 @@ This example takes a single master record and retrieves all related detail recor
 ###Limitations
 
 As the function relies on secondary indexes, it requires a storage backend that supports secondary indexes to be used, e.g. eleveldb.
+
+map_link()
+----------
+
+This function allows records referenced through links to be added to the result set in a similar way as to how a standard link phase works. It only follows links on the record being processed and allows the records links are found on to be passed on as part of the result set.
+
+The function takes a JSON formatted argument that specifies which records to process links on and which tags to follow. 
+
+###Configuration
+
+The configuration string must be a correctly formatted JSON document and may contain the following 3 fields: 
+
+**bucket** - Mandatory field containing the name of the bucket containing records that are to have links processed. If this is not specified all records, regardless of bucket, will be processed for links. If a record is encountered that does not belong to the specified bucket (if one exists), it will be passed straight through based on the **retain** parameter described below
+
+**tags** - This field is optional and must contain the tag (or list of tags) to follow when link-walking. If this parameter is not specified, or is set to "_", all links will be followed.
+
+**retain** - This parameter is optional and detaults to *true*. It specifies whether the input should be retained as part of the result set or not. If set to false, only records retrieved through links are returned. 
+
+###Example
+
+**Follow all links while retaining input records**
+
+This example follows all links on records belonging to the master bucket. As **retain** is not specified, all input records will also be passed through and form part of the result set. 
+
+    $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
+        "inputs":[["master","m1"]],
+        "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
+                     "function":"map_link","keep":false,
+                     "arg":"{\"bucket\":\"master\"}"}},
+                 {"map":{"language":"erlang","module":"riak_mapreduce_utils",
+                     "function":"map_id"}}]}'
+    [["detail","d3"],["master","m1"],["detail","d1"]]
+    $>
+
+**Follow select links while retaining input records**
+
+This example follows only links tagged 'first' on records belonging to the master bucket. As **retain** is not specified, all input records will also be passed through and form part of the result set. 
+
+
+    $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
+        "inputs":[["master","m1"],["detail","d4"]],
+        "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
+                     "function":"map_link","keep":false,
+                     "arg":"{\"bucket\":\"master\",\"tags\":[\"first\"],\"retain\":\"true\"}"}},
+                 {"map":{"language":"erlang","module":"riak_mapreduce_utils",
+                     "function":"map_id"}}]}'
+    [["detail","d4"],["master","m1"],["detail","d1"]]
+    $>
 
 map_metafilter()
 ----------------

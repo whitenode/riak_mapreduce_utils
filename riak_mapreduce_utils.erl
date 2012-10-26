@@ -28,7 +28,8 @@
          map_metafilter/3,
          map_id/3,
          map_key/3,
-         map_datasize/3
+         map_datasize/3,
+         map_link/3
         ]).
 
 %% From riak_pb_kv_codec.hrl
@@ -78,26 +79,28 @@ map_indexinclude(RiakObject, Props, JsonArg) ->
     % Parse config arg
     %%Args = decode_arguments(JsonArg),
     {struct, Args} = mochijson2:decode(JsonArg),
-    case proplists:get_value(<<"keep">>, Args) of
+    Retain = case proplists:get_value(<<"retain">>, Args) of
+        false ->
+            false;
         <<"false">> ->
-            Keep = false;
+            false;
         _ ->
-            Keep = true
+            true
     end,
-    case {proplists:get_value(<<"source">>, Args),
+    case {proplists:get_value(<<"bucket">>, Args),
             proplists:get_value(<<"target">>, Args),
             proplists:get_value(<<"indexname">>, Args)} of
         {undefined, _, _} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {_, undefined, _} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {_, _, undefined} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {Bucket, Target, IndexName} ->
             Result = get_index_items(Target, Props, IndexName, Key),
-            return_list(InitialList, Result, Keep);
+            return_list(InitialList, Result, Retain);
         _ ->
-            return_list(InitialList, [], Keep)
+            return_list(InitialList, [], Retain)
     end.
 
 %% @spec map_indexlink(riak_object:riak_object(), term(), term()) ->
@@ -110,26 +113,28 @@ map_indexlink(RiakObject, Props, JsonArg) ->
     Key = riak_object:key(RiakObject),
     InitialList = [{{Bucket, Key}, Props}],
     {struct, Args} = mochijson2:decode(JsonArg),
-    case proplists:get_value(<<"keep">>, Args) of
+    Retain = case proplists:get_value(<<"retain">>, Args) of
+        false ->
+            false;
         <<"false">> ->
-            Keep = false;
+            false;
         _ ->
-            Keep = true
+            true
     end,
-    case {proplists:get_value(<<"source">>, Args),
+    case {proplists:get_value(<<"bucket">>, Args),
             proplists:get_value(<<"target">>, Args),
             proplists:get_value(<<"indexname">>, Args)} of
         {undefined, _, _} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {_, undefined, _} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {_, _, undefined} ->
-            return_list(InitialList, [], Keep);
+            return_list(InitialList, [], Retain);
         {Bucket, Target, IndexName} ->
             Result = create_indexlink_list(RiakObject, Props, IndexName, Target),
-            return_list(InitialList, Result, Keep);
+            return_list(InitialList, Result, Retain);
         _ ->
-            return_list(InitialList, [], Keep)
+            return_list(InitialList, [], Retain)
     end.
 
 %% @spec map_metafilter(riak_object:riak_object(), term(), term()) ->
@@ -143,18 +148,18 @@ map_metafilter(RiakObject, Props, JsonArg) ->
     MetaDataList = riak_object:get_metadatas(RiakObject),
     InitialList = [{{Bucket, Key}, Props}],
     {struct, Args} = mochijson2:decode(JsonArg),
-    case {proplists:get_value(<<"source">>, Args),
+    Result = case {proplists:get_value(<<"bucket">>, Args),
             proplists:get_value(<<"criteria">>, Args)} of
         {Bucket, undefined} ->
-            Result = true;
+            true;
         {Bucket, []} ->
-            Result = true;
+            true;
         {Bucket, Criteria} when is_list(Criteria)->
-            Result = check_criteria(MetaDataList, Criteria);
+            check_criteria(MetaDataList, Criteria);
         {undefined, Criteria} when is_list(Criteria) ->
-            Result = check_criteria(MetaDataList, Criteria);
+            check_criteria(MetaDataList, Criteria);
         _ ->
-            Result = false
+            false
     end,
     case Result of
         true ->
@@ -220,6 +225,43 @@ map_datasize(RiakObject, _, _) ->
                                (byte_size(V) + A)
                            end, 0, riak_object:get_values(RiakObject)),
     [DataSize].
+
+%% @spec map_link(riak_object:riak_object(), term(), term()) ->
+%%                   [{{Bucket :: binary(), Key :: binary()}, Props :: term()}]
+%% @doc map phase function for flexible processing of links
+map_link({error, notfound}, _, _) ->
+    [];
+map_link(RiakObject, Props, JsonArg) ->
+    Bucket = riak_object:bucket(RiakObject),
+    Key = riak_object:key(RiakObject),
+    InitialList = [{{Bucket, Key}, Props}],
+    {struct, Args} = mochijson2:decode(JsonArg),
+    Retain = case proplists:get_value(<<"retain">>, Args) of
+        false ->
+            false;
+        <<"false">> ->
+            false;
+        _ ->
+            true
+    end,
+    Records = case {proplists:get_value(<<"bucket">>, Args),
+            proplists:get_value(<<"tags">>, Args)} of
+        {undefined, _} ->
+            [];
+        {Bucket, undefined} ->
+            get_linked_records(RiakObject, [], Props);
+        {Bucket, <<"_">>} ->
+            get_linked_records(RiakObject, [], Props);
+        {Bucket, [<<"_">>]} ->
+            get_linked_records(RiakObject, [], Props);
+        {Bucket, Tag} when is_binary(Tag) ->
+            get_linked_records(RiakObject, [Tag], Props);
+        {Bucket, Tags} when is_list(Tags) ->
+            get_linked_records(RiakObject, Tags, Props);
+        _ ->
+            []
+    end,
+    return_list(InitialList, Records, Retain).
 
 %% hidden
 get_index_items(Bucket, Props, IndexName, Value) ->
@@ -311,8 +353,10 @@ check_parsed_criteria([], _CList) ->
     false; 
 check_parsed_criteria([MetaData | Rest], CList) ->
     case evaluate_criteria(MetaData, CList) of
-        true -> true;
-        _ -> check_parsed_criteria(Rest, CList)
+        true ->
+            true;
+        _ ->
+            check_parsed_criteria(Rest, CList)
     end.
 
 %% hidden
@@ -332,13 +376,13 @@ evaluate_criteria(MetaData, [{Op, {Type, F}, V} | List]) ->
     end.
     
 get_metadata_value(MetaData, Type, MetaName) ->
-    case Type of
+    MN = case Type of
         meta ->
             MetaKey = ?MD_USERMETA,
-            MN = binary_to_list(MetaName);
+            binary_to_list(MetaName);
         index ->
             MetaKey = ?MD_INDEX,
-            MN = MetaName
+            MetaName
     end,
     case dict:find(MetaKey, MetaData) of
         {ok, Value} ->
@@ -375,3 +419,22 @@ check_value(less_than, Value, Param) ->
     Value < Param;
 check_value(less_than_eq, Value, Param) ->
     Value =< Param.
+
+%% hidden
+get_linked_records(RiakObject, [], Props) ->
+    % Get all links
+    Meta = riak_object:get_metadata(RiakObject),
+    case dict:find(<<"Links">>, Meta) of
+        {ok, List} ->
+            [{{B, K}, Props} || {{B, K}, _Tag} <- List];
+        error ->
+            []
+    end;
+get_linked_records(RiakObject, TagList, Props) when is_list(TagList) ->
+    Meta = riak_object:get_metadata(RiakObject),
+    case dict:find(<<"Links">>, Meta) of
+        {ok, List} ->
+            [{{B, K}, Props} || {{B, K}, Tag} <- List, lists:member(Tag, TagList)];
+        error ->
+            []
+    end.
