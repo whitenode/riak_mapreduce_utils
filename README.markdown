@@ -289,9 +289,17 @@ The configuration string must be a correctly formatted JSON document and may con
 
 **tags** - This field is optional and must contain the tag (or list of tags) to follow when link-walking. If this parameter is not specified, or is set to "_", all links will be followed.
 
-**retain** - This parameter is optional and detaults to *true*. It specifies whether the input should be retained as part of the result set or not. If set to false, only records retrieved through links are returned. 
+**retain** - This parameter is optional and defaults to *true*. It specifies whether the input should be retained as part of the result set or not. If set to false, only records retrieved through links are returned. 
 
-###Example
+Below is an example of a valid configuration based on the testdata specified above. 
+
+    "{
+        "bucket":"master",
+        "tags":["first","last"],
+        "retain":"false"
+    }"
+
+###Examples
 
 **Follow all links while retaining input records**
 
@@ -333,9 +341,9 @@ If a record matches all the criteria configured for the filter, it will be dropp
 
 The configuration string must be a correctly formatted and escaped JSON document and may contain the following 2 fields, out of which at least one needs to be present:
 
-**source** - Name of the bucket containing records to be filtered. If a record is encountered that does not belong to the specified bucket, it will be passed straight through and not processed with respect to criteria by the function.
+**bucket** - Name of the bucket containing records to be filtered. If a record is encountered that does not belong to the specified bucket, it will be passed straight through and not processed with respect to criteria by the function.
 
-This is an optional field, and if no **source** is specified, all records passed in will be processed.
+This is an optional field, and if no **bucket** is specified, all records passed in will be processed.
 
 **criteria** - This field contains a list of criteria. These will be evaluated against the record, and if ALL of them evaluate to true, the record will be filtered out.
 
@@ -360,7 +368,7 @@ The following operations are allowed:
 Below is an example of a valid configuration based on the testdata specified above. 
 
     "{
-        "source":"detail",
+        "bucket":"detail",
         "criteria":[["eq","meta:X-Riak-Meta-Type","X"],["less_than","index:idx_int","15"]]
     }"
 
@@ -374,7 +382,7 @@ This example filters out all records belonging to the *master* bucket and keeps 
         "inputs":[["master","m1"],["detail","d2"],["detail","d3"]],
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
                          "function":"map_metafilter","keep":false,
-                         "arg":"{\"source\":\"master\"}"}},
+                         "arg":"{\"bucket\":\"master\"}"}},
                  {"map":{"language":"erlang","module":"riak_mapreduce_utils",
                         "function":"map_id"}}]}'
     [["detail","d2"],["detail","d3"]]
@@ -402,7 +410,7 @@ This example shows how to filter based on a secondary integer index. It filters 
         "inputs":"detail",
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
                          "function":"map_metafilter","keep":false,
-                         "arg":"{\"source\":\"detail\",
+                         "arg":"{\"bucket\":\"detail\",
                          \"criteria\":[[\"less_than_eq\",\"index:idx_int\",\"68\"]]}"}},
                  {"map":{"language":"erlang","module":"riak_mapreduce_utils",
                          "function":"map_id"}}]}'
@@ -417,7 +425,7 @@ The example below shows how to filter out all the records that have an integer i
         "inputs":"detail",
         "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils",
                          "function":"map_metafilter","keep":false,
-                         "arg":"{\"source\":\"detail\",
+                         "arg":"{\"bucket\":\"detail\",
                          \"criteria\":[[\"greater_than_eq\",\"index:idx_int\",\"10\"],
                                        [\"less_than_eq\",\"index:idx_int\",\"100\"]]}"}},
                  {"map":{"language":"erlang","module":"riak_mapreduce_utils",
