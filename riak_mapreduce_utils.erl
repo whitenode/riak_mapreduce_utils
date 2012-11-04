@@ -29,16 +29,17 @@
          map_id/3,
          map_key/3,
          map_datasize/3,
-         map_link/3
+         map_link/3,
+         map_readrepair/3
         ]).
 
 %% From riak_pb_kv_codec.hrl
 -define(MD_USERMETA, <<"X-Riak-Meta">>).
 -define(MD_INDEX,    <<"index">>).
 
-%%
-%% Map Phases
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Externalfunctions                           %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @spec map_delete(riak_object:riak_object(), term(), term()) ->
 %%                   [integer()]
@@ -262,6 +263,22 @@ map_link(RiakObject, Props, JsonArg) ->
             []
     end,
     return_list(InitialList, Records, Retain).
+
+%% @spec map_readrepair(riak_object:riak_object(), term(), term()) ->
+%%                   []
+%% @doc map phase function performing a read-repair on record passed in.
+map_readrepair({error, notfound}, _, _) ->
+    [];
+map_readrepair(RiakObject, _, _) ->
+    Bucket = riak_object:bucket(RiakObject),
+    Key = riak_object:key(RiakObject),
+    {ok, C} = riak:local_client(),
+    C:get(Bucket, Key),
+    [].
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Internal functions                          %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% hidden
 get_index_items(Bucket, Props, IndexName, Value) ->

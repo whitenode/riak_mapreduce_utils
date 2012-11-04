@@ -1,9 +1,7 @@
 Overview
 ========
 
-The riak_mapreduce_utils module contains a collection of eight mapreduce utility functions implemented in Erlang.
-
-**map_delete** allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
+The riak_mapreduce_utils module contains a collection of nine mapreduce utility functions implemented in Erlang.
 
 **map_indexlink** and **map_indexinclude** allow master-detail relationships to be defined and managed through secondary indexes (2i) instead of links. These functions rely on a reference to the master record being set as a secondary index on each of the detail records. Unlike when using links to manage master-detail relationships, this method allows detail records to be added or deleted without having to update the master record. 
 
@@ -15,11 +13,15 @@ The riak_mapreduce_utils module contains a collection of eight mapreduce utility
 
 **map_metafilter** allows records to be filtered out from the result set based on Bucket and meta data (2i and user metadata).
 
+**map_delete** allows deletes to be performed where the data resides. This complements the [reduce phase delete function](http://contrib.basho.com/delete_keys.html) available through [Basho contrib](http://contrib.basho.com/). It can be configured to only process records belonging to a specific Bucket.
+
 **map_id** returns readable bucket and key pairs. 
 
 **map_key** returns readable keys.
 
 **map_datasize** returns the size of the stored object.
+
+**map_readrepair** performs a read repair on the record passed in.
 
 Installation
 ============
@@ -448,5 +450,21 @@ This example sums up the size of data for all records in the *master* bucket.
 	{"reduce":{"language":"erlang","module":"riak_kv_mapreduce","function":"reduce_sum"}}]}'
     [14]
     $>
+
+map_readrepair()
+----------------
+
+The **map_readrepair** function performs a read-repair on records passed in and returns nothing.
+
+###Example
+
+This example performs a read-repair on all records in the *master* bucket.
+
+    $> curl -XPOST http://localhost:8098/mapred -H 'Content-Type: application/json' -d '{
+        "inputs":"master",
+	    "query":[{"map":{"language":"erlang","module":"riak_mapreduce_utils","function":"map_readrepair"}}]}'
+    []
+    $>
+
 
 
