@@ -51,18 +51,23 @@ map_delete(RiakObject, Props, Arg) when is_list(Arg) ->
 map_delete(RiakObject, Props, Arg) when is_atom(Arg) ->
     map_delete(RiakObject, Props, <<"">>);
 map_delete(RiakObject, _, Arg) when is_binary(Arg) ->
-    {ok, C} = riak:local_client(),
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    case Arg of
-        Bucket ->
-            C:delete(Bucket, Key),
-            [1];
-        <<"">> ->
-            C:delete(Bucket, Key),
-            [1];
-        _ ->
-            []
+    case is_deleted(RiakObject) of
+        true ->
+            [];
+        false ->
+            {ok, C} = riak:local_client(),
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            case Arg of
+                Bucket ->
+                    C:delete(Bucket, Key),
+                    [1];
+                <<"">> ->
+                    C:delete(Bucket, Key),
+                    [1];
+                _ ->
+                    []
+            end
     end;
 map_delete(_, _, _) ->
     [].
@@ -74,34 +79,39 @@ map_delete(_, _, _) ->
 map_indexinclude({error, notfound}, _, _) ->
     [];
 map_indexinclude(RiakObject, Props, JsonArg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    InitialList = [{{Bucket, Key}, Props}],
-    % Parse config arg
-    %%Args = decode_arguments(JsonArg),
-    {struct, Args} = mochijson2:decode(JsonArg),
-    Retain = case proplists:get_value(<<"retain">>, Args) of
+    case is_deleted(RiakObject) of
+        true ->
+            [];
         false ->
-            false;
-        <<"false">> ->
-            false;
-        _ ->
-            true
-    end,
-    case {proplists:get_value(<<"bucket">>, Args),
-            proplists:get_value(<<"target">>, Args),
-            proplists:get_value(<<"indexname">>, Args)} of
-        {undefined, _, _} ->
-            return_list(InitialList, [], Retain);
-        {_, undefined, _} ->
-            return_list(InitialList, [], Retain);
-        {_, _, undefined} ->
-            return_list(InitialList, [], Retain);
-        {Bucket, Target, IndexName} ->
-            Result = get_index_items(Target, Props, IndexName, Key),
-            return_list(InitialList, Result, Retain);
-        _ ->
-            return_list(InitialList, [], Retain)
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            InitialList = [{{Bucket, Key}, Props}],
+            % Parse config arg
+            %%Args = decode_arguments(JsonArg),
+            {struct, Args} = mochijson2:decode(JsonArg),
+            Retain = case proplists:get_value(<<"retain">>, Args) of
+                false ->
+                    false;
+                <<"false">> ->
+                    false;
+                _ ->
+                    true
+            end,
+            case {proplists:get_value(<<"bucket">>, Args),
+                    proplists:get_value(<<"target">>, Args),
+                    proplists:get_value(<<"indexname">>, Args)} of
+                {undefined, _, _} ->
+                    return_list(InitialList, [], Retain);
+                {_, undefined, _} ->
+                    return_list(InitialList, [], Retain);
+                {_, _, undefined} ->
+                    return_list(InitialList, [], Retain);
+                {Bucket, Target, IndexName} ->
+                    Result = get_index_items(Target, Props, IndexName, Key),
+                    return_list(InitialList, Result, Retain);
+                _ ->
+                    return_list(InitialList, [], Retain)
+            end
     end.
 
 %% @spec map_indexlink(riak_object:riak_object(), term(), term()) ->
@@ -110,32 +120,37 @@ map_indexinclude(RiakObject, Props, JsonArg) ->
 map_indexlink({error, notfound}, _, _) ->
     [];
 map_indexlink(RiakObject, Props, JsonArg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    InitialList = [{{Bucket, Key}, Props}],
-    {struct, Args} = mochijson2:decode(JsonArg),
-    Retain = case proplists:get_value(<<"retain">>, Args) of
+    case is_deleted(RiakObject) of
+        true ->
+            [];
         false ->
-            false;
-        <<"false">> ->
-            false;
-        _ ->
-            true
-    end,
-    case {proplists:get_value(<<"bucket">>, Args),
-            proplists:get_value(<<"target">>, Args),
-            proplists:get_value(<<"indexname">>, Args)} of
-        {undefined, _, _} ->
-            return_list(InitialList, [], Retain);
-        {_, undefined, _} ->
-            return_list(InitialList, [], Retain);
-        {_, _, undefined} ->
-            return_list(InitialList, [], Retain);
-        {Bucket, Target, IndexName} ->
-            Result = create_indexlink_list(RiakObject, Props, IndexName, Target),
-            return_list(InitialList, Result, Retain);
-        _ ->
-            return_list(InitialList, [], Retain)
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            InitialList = [{{Bucket, Key}, Props}],
+            {struct, Args} = mochijson2:decode(JsonArg),
+            Retain = case proplists:get_value(<<"retain">>, Args) of
+                false ->
+                    false;
+                <<"false">> ->
+                    false;
+                _ ->
+                    true
+            end,
+            case {proplists:get_value(<<"bucket">>, Args),
+                    proplists:get_value(<<"target">>, Args),
+                    proplists:get_value(<<"indexname">>, Args)} of
+                {undefined, _, _} ->
+                    return_list(InitialList, [], Retain);
+                {_, undefined, _} ->
+                    return_list(InitialList, [], Retain);
+                {_, _, undefined} ->
+                    return_list(InitialList, [], Retain);
+                {Bucket, Target, IndexName} ->
+                    Result = create_indexlink_list(RiakObject, Props, IndexName, Target),
+                    return_list(InitialList, Result, Retain);
+                _ ->
+                    return_list(InitialList, [], Retain)
+            end
     end.
 
 %% @spec map_metafilter(riak_object:riak_object(), term(), term()) ->
@@ -144,29 +159,34 @@ map_indexlink(RiakObject, Props, JsonArg) ->
 map_metafilter({error, notfound}, _, _) ->
     [];
 map_metafilter(RiakObject, Props, JsonArg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    MetaDataList = riak_object:get_metadatas(RiakObject),
-    InitialList = [{{Bucket, Key}, Props}],
-    {struct, Args} = mochijson2:decode(JsonArg),
-    Result = case {proplists:get_value(<<"bucket">>, Args),
-            proplists:get_value(<<"criteria">>, Args)} of
-        {Bucket, undefined} ->
-            true;
-        {Bucket, []} ->
-            true;
-        {Bucket, Criteria} when is_list(Criteria)->
-            check_criteria(MetaDataList, Criteria);
-        {undefined, Criteria} when is_list(Criteria) ->
-            check_criteria(MetaDataList, Criteria);
-        _ ->
-            false
-    end,
-    case Result of
+    case is_deleted(RiakObject) of
         true ->
             [];
-        _ ->
-            InitialList
+        false ->
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            MetaDataList = riak_object:get_metadatas(RiakObject),
+            InitialList = [{{Bucket, Key}, Props}],
+            {struct, Args} = mochijson2:decode(JsonArg),
+            Result = case {proplists:get_value(<<"bucket">>, Args),
+                    proplists:get_value(<<"criteria">>, Args)} of
+                {Bucket, undefined} ->
+                    true;
+                {Bucket, []} ->
+                    true;
+                {Bucket, Criteria} when is_list(Criteria)->
+                    check_criteria(MetaDataList, Criteria);
+                {undefined, Criteria} when is_list(Criteria) ->
+                    check_criteria(MetaDataList, Criteria);
+                _ ->
+                    false
+            end,
+            case Result of
+                true ->
+                    [];
+                _ ->
+                    InitialList
+            end
     end.
 
 %% @spec map_id(riak_object:riak_object(), term(), term()) ->
@@ -179,15 +199,20 @@ map_id(RiakObject, Props, Arg) when is_list(Arg) ->
 map_id(RiakObject, Props, Arg) when is_atom(Arg) ->
     map_id(RiakObject, Props, <<"">>);
 map_id(RiakObject, _, Arg) when is_binary(Arg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    case Arg of
-        Bucket ->
-            [[Bucket, Key]];
-        <<"">> ->
-            [[Bucket, Key]];
-        _ ->
-            []
+    case is_deleted(RiakObject) of
+        true ->
+            [];
+        false ->
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            case Arg of
+                Bucket ->
+                    [[Bucket, Key]];
+                <<"">> ->
+                    [[Bucket, Key]];
+                _ ->
+                    []
+            end
     end;
 map_id(_, _, _) ->
     [].
@@ -202,15 +227,20 @@ map_key(RiakObject, Props, Arg) when is_list(Arg) ->
 map_key(RiakObject, Props, Arg) when is_atom(Arg) ->
     map_key(RiakObject, Props, <<"">>);
 map_key(RiakObject, _, Arg) when is_binary(Arg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    case Arg of
-        Bucket ->
-            [Key];
-        <<"">> ->
-            [Key];
-        _ ->
-            []
+    case is_deleted(RiakObject) of
+        true ->
+            [];
+        false ->
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            case Arg of
+                Bucket ->
+                    [Key];
+                <<"">> ->
+                    [Key];
+                _ ->
+                    []
+            end
     end;
 map_key(_, _, _) ->
     [].   
@@ -222,10 +252,15 @@ map_key(_, _, _) ->
 map_datasize({error, notfound}, _, _) ->
     [];
 map_datasize(RiakObject, _, _) ->
-    DataSize = lists:foldl(fun(V, A) ->
-                               (byte_size(V) + A)
-                           end, 0, riak_object:get_values(RiakObject)),
-    [DataSize].
+    case is_deleted(RiakObject) of
+        true ->
+            [];
+        false ->    
+            DataSize = lists:foldl(fun(V, A) ->
+                                       (byte_size(V) + A)
+                                   end, 0, riak_object:get_values(RiakObject)),
+            [DataSize]
+    end.
 
 %% @spec map_link(riak_object:riak_object(), term(), term()) ->
 %%                   [{{Bucket :: binary(), Key :: binary()}, Props :: term()}]
@@ -233,36 +268,41 @@ map_datasize(RiakObject, _, _) ->
 map_link({error, notfound}, _, _) ->
     [];
 map_link(RiakObject, Props, JsonArg) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    InitialList = [{{Bucket, Key}, Props}],
-    {struct, Args} = mochijson2:decode(JsonArg),
-    Retain = case proplists:get_value(<<"retain">>, Args) of
-        false ->
-            false;
-        <<"false">> ->
-            false;
-        _ ->
-            true
-    end,
-    Records = case {proplists:get_value(<<"bucket">>, Args),
-            proplists:get_value(<<"tags">>, Args)} of
-        {undefined, _} ->
+    case is_deleted(RiakObject) of
+        true ->
             [];
-        {Bucket, undefined} ->
-            get_linked_records(RiakObject, [], Props);
-        {Bucket, <<"_">>} ->
-            get_linked_records(RiakObject, [], Props);
-        {Bucket, [<<"_">>]} ->
-            get_linked_records(RiakObject, [], Props);
-        {Bucket, Tag} when is_binary(Tag) ->
-            get_linked_records(RiakObject, [Tag], Props);
-        {Bucket, Tags} when is_list(Tags) ->
-            get_linked_records(RiakObject, Tags, Props);
-        _ ->
-            []
-    end,
-    return_list(InitialList, Records, Retain).
+        false ->
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            InitialList = [{{Bucket, Key}, Props}],
+            {struct, Args} = mochijson2:decode(JsonArg),
+            Retain = case proplists:get_value(<<"retain">>, Args) of
+                false ->
+                    false;
+                <<"false">> ->
+                    false;
+                _ ->
+                    true
+            end,
+            Records = case {proplists:get_value(<<"bucket">>, Args),
+                    proplists:get_value(<<"tags">>, Args)} of
+                {undefined, _} ->
+                    [];
+                {Bucket, undefined} ->
+                    get_linked_records(RiakObject, [], Props);
+                {Bucket, <<"_">>} ->
+                    get_linked_records(RiakObject, [], Props);
+                {Bucket, [<<"_">>]} ->
+                    get_linked_records(RiakObject, [], Props);
+                {Bucket, Tag} when is_binary(Tag) ->
+                    get_linked_records(RiakObject, [Tag], Props);
+                {Bucket, Tags} when is_list(Tags) ->
+                    get_linked_records(RiakObject, Tags, Props);
+                _ ->
+                    []
+            end,
+            return_list(InitialList, Records, Retain)
+    end.
 
 %% @spec map_readrepair(riak_object:riak_object(), term(), term()) ->
 %%                   []
@@ -270,11 +310,16 @@ map_link(RiakObject, Props, JsonArg) ->
 map_readrepair({error, notfound}, _, _) ->
     [];
 map_readrepair(RiakObject, _, _) ->
-    Bucket = riak_object:bucket(RiakObject),
-    Key = riak_object:key(RiakObject),
-    {ok, C} = riak:local_client(),
-    C:get(Bucket, Key),
-    [].
+    case is_deleted(RiakObject) of
+        true ->
+            [];
+        false ->
+            Bucket = riak_object:bucket(RiakObject),
+            Key = riak_object:key(RiakObject),
+            {ok, C} = riak:local_client(),
+            C:get(Bucket, Key),
+            []
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Internal functions                          %%
@@ -454,4 +499,20 @@ get_linked_records(RiakObject, TagList, Props) when is_list(TagList) ->
             [{{B, K}, Props} || {{B, K}, Tag} <- List, lists:member(Tag, TagList)];
         error ->
             []
+    end.
+
+%% hidden
+is_deleted(RiakObject) ->
+    MetaDataList = riak_object:get_metadatas(RiakObject),
+    delete_header_exists(MetaDataList).
+    
+%% hidden
+delete_header_exists([]) ->
+    false;
+delete_header_exists([Dict | D]) ->
+    case dict:is_key(<<"X-Riak-Deleted">>, Dict) of
+        true ->
+            true;
+        false ->
+            delete_header_exists(D)
     end.
